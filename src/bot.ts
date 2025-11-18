@@ -1,7 +1,11 @@
 // src/bot.ts
 import "dotenv/config";
 import { Bot, InlineKeyboard, session } from "grammy"; // <- session imported synchronously
-import { Conversation, conversations, createConversation } from "@grammyjs/conversations";
+import {
+  Conversation,
+  conversations,
+  createConversation,
+} from "@grammyjs/conversations";
 import { formatInTimeZone, toZonedTime } from "date-fns-tz";
 import prisma from "./db";
 import { MyContext, MySession } from "./types";
@@ -24,7 +28,6 @@ bot.use(conversations() as any);
 // register conversation functions
 bot.use(createConversation(addIncomeConversation) as any);
 bot.use(createConversation(addExpenseConversation) as any);
-
 
 // debugging middleware — prints every incoming update (safe to remove later)
 // bot.use(async (ctx, next) => {
@@ -69,15 +72,146 @@ Ushbu bot bilan siz oylik va kundalik daromad va xarajatlarni yozib borishingiz 
 Asosiy buyruqlar:
 /start — Asosiy menyuni ko'rsatadi
 /help — Ushbu yordam xabari
+/add_income — Yangi daromad qo'shish (bot sizdan manba va summani so'raydi)
+/add_expense — Yangi xarajat qo'shish (bot sizdan nom, summa va kategoriya so'raydi)
+/report_today — Bugungi hisobot (daromad / xarajat)
+/report_month — Oylik hisobot (daromad / xarajat)
+/balance — Balansni ko'rish
 
 🔔 Eslatma:
-• Bot yangi xarajat qo'shilganda avtomatik tekshiradi — agar shu oy xarajatlaringiz daromaddan oshsa, ogohlantiradi.
+• Bot yangi xarajat qo'shilganda avtomatik tekshiradi — agar shu oy xarajatlaringiz daromaddan oshsa, ogohlantiradi.`;
 
-Agar sizga yordam kerak bo'lsa yoki xatolik ko'rsangiz, menga xabar yuboring.`;
 
-  // send as Markdown to get bold/italics (avoid user-supplied content here)
   await ctx.reply(helpText);
 });
+
+// Command handlers for text commands
+bot.command("add_income", async (ctx) => {
+  await (ctx as any).conversation.enter(addIncomeConversation.name);
+});
+
+bot.command("add_expense", async (ctx) => {
+  await (ctx as any).conversation.enter(addExpenseConversation.name);
+});
+
+bot.command("report_today", async (ctx) => {
+  const { start, end } = getDayRange(new Date());
+
+  const income = await prisma.transaction.aggregate({
+    _sum: { amount: true },
+    where: {
+      type: "INCOME",
+      date: { gte: start, lte: end },
+      userId: ctx.from?.id
+        ? { equals: (await getUser(ctx.from.id)).id }
+        : undefined,
+    },
+  });
+
+  const expense = await prisma.transaction.aggregate({
+    _sum: { amount: true },
+    where: {
+      type: "EXPENSE",
+      date: { gte: start, lte: end },
+      userId: ctx.from?.id
+        ? { equals: (await getUser(ctx.from.id)).id }
+        : undefined,
+    },
+  });
+
+  const tz = process.env.TZ || "Asia/Tashkent";
+  await ctx.reply(
+    `📊 Bugungi hisobot (${formatInTimeZone(new Date(), tz, "yyyy-MM-dd")}):\n\n` +
+      `Kirim: ${income._sum.amount ?? 0}\n` +
+      `Chiqim: ${expense._sum.amount ?? 0}`,
+  );
+});
+
+bot.command("report_month", async (ctx) => {
+  const { start, end } = getMonthRange(new Date());
+
+  const income = await prisma.transaction.aggregate({
+    _sum: { amount: true },
+    where: {
+      type: "INCOME",
+      date: { gte: start, lte: end },
+      userId: ctx.from?.id
+        ? { equals: (await getUser(ctx.from.id)).id }
+        : undefined,
+    },
+  });
+
+  const expense = await prisma.transaction.aggregate({
+    _sum: { amount: true },
+    where: {
+      type: "EXPENSE",
+      date: { gte: start, lte: end },
+      userId: ctx.from?.id
+        ? { equals: (await getUser(ctx.from.id)).id }
+        : undefined,
+    },
+  });
+
+  const tz = process.env.TZ || "Asia/Tashkent";
+  await ctx.reply(
+    `📅 Oylik hisobot (${formatInTimeZone(new Date(), tz, "yyyy-MM")}):\n\n` +
+      `Kirim: ${income._sum.amount ?? 0}\n` +
+      `Chiqim: ${expense._sum.amount ?? 0}`,
+  );
+});
+
+bot.command("balance", async (ctx) => {
+  const user = await getUser(ctx.from!.id);
+
+  const income = await prisma.transaction.aggregate({
+    _sum: { amount: true },
+    where: {
+      type: "INCOME",
+      userId: user.id,
+    },
+  });
+
+  const expense = await prisma.transaction.aggregate({
+    _sum: { amount: true },
+    where: {
+      type: "EXPENSE",
+      userId: user.id,
+    },
+  });
+
+  const totalIncome = income._sum.amount ?? 0;
+  const totalExpense = expense._sum.amount ?? 0;
+  const balance = totalIncome - totalExpense;
+
+  await ctx.reply(
+    `💰 Sizning balansingiz:\n\n` +
+      `Jami kirim: ${fmtAmount(totalIncome)}\n` +
+      `Jami chiqim: ${fmtAmount(totalExpense)}\n` +
+      `Balans: ${fmtAmount(balance)}`,
+  );
+});
+
+// Helper function to get or create user
+async function getUser(telegramId: number) {
+  let user = await prisma.user.findUnique({
+    where: { telegramId },
+  });
+
+  if (!user) {
+    user = await prisma.user.create({
+      data: {
+        telegramId,
+        firstName: "User", // This will be updated when they use conversations
+        userName: null,
+      },
+    });
+  }
+
+  return user;
+}
+
+// Import fmtAmount at the top of the file
+import { fmtAmount } from "./utils";
 
 // Button Logics
 bot.callbackQuery("add_income", async (ctx) => {
@@ -134,15 +268,24 @@ bot.callbackQuery("report_today", async (ctx) => {
   await ctx.answerCallbackQuery();
 
   const { start, end } = getDayRange(new Date());
+  const user = await getUser(ctx.from!.id);
 
   const income = await prisma.transaction.aggregate({
     _sum: { amount: true },
-    where: { type: "INCOME", date: { gte: start, lte: end } },
+    where: {
+      type: "INCOME",
+      date: { gte: start, lte: end },
+      userId: user.id,
+    },
   });
 
   const expense = await prisma.transaction.aggregate({
     _sum: { amount: true },
-    where: { type: "EXPENSE", date: { gte: start, lte: end } },
+    where: {
+      type: "EXPENSE",
+      date: { gte: start, lte: end },
+      userId: user.id,
+    },
   });
 
   const tz = process.env.TZ || "Asia/Tashkent";
@@ -157,15 +300,24 @@ bot.callbackQuery("report_month", async (ctx) => {
   await ctx.answerCallbackQuery();
 
   const { start, end } = getMonthRange(new Date());
+  const user = await getUser(ctx.from!.id);
 
   const income = await prisma.transaction.aggregate({
     _sum: { amount: true },
-    where: { type: "INCOME", date: { gte: start, lte: end } },
+    where: {
+      type: "INCOME",
+      date: { gte: start, lte: end },
+      userId: user.id,
+    },
   });
 
   const expense = await prisma.transaction.aggregate({
     _sum: { amount: true },
-    where: { type: "EXPENSE", date: { gte: start, lte: end } },
+    where: {
+      type: "EXPENSE",
+      date: { gte: start, lte: end },
+      userId: user.id,
+    },
   });
 
   const tz = process.env.TZ || "Asia/Tashkent";

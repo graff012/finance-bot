@@ -11,10 +11,3 @@ export type MyContext = Context & {
   conversation: any; // Use 'any' to avoid the complex ConversationFlavor type
 };
 
-
-// /add_income — Yangi daromad qo'shish (bot sizdan manba va summani so'raydi)
-// /add_expense — Yangi xarajat qo'shish (bot sizdan nom, summa va kategoriya so'raydi)
-// /report_today — Bugungi hisobot (daromad / xarajat)
-// /report_month — Oylik hisobot (daromad / xarajat)
-// /set_limit — Oy uchun xarajat limitini belgilash
-// /check_limit — Hoziroq limit holatini ko'rish

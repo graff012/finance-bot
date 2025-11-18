@@ -58,6 +58,11 @@ Ushbu bot bilan siz oylik va kundalik daromad va xarajatlarni yozib borishingiz 
 Asosiy buyruqlar:
 /start — Asosiy menyuni ko'rsatadi
 /help — Ushbu yordam xabari
+/add_income — Yangi daromad qo'shish (bot sizdan manba va summani so'raydi)
+/add_expense — Yangi xarajat qo'shish (bot sizdan nom, summa va kategoriya so'raydi)
+/report_today — Bugungi hisobot (daromad / xarajat)
+/report_month — Oylik hisobot (daromad / xarajat)
+/balance — Balansni ko'rish
 
 🔔 Eslatma:
 • Bot yangi xarajat qo'shilganda avtomatik tekshiradi — agar shu oy xarajatlaringiz daromaddan oshsa, ogohlantiradi.
@@ -66,6 +71,101 @@ Agar sizga yordam kerak bo'lsa yoki xatolik ko'rsangiz, menga xabar yuboring.`;
     // send as Markdown to get bold/italics (avoid user-supplied content here)
     await ctx.reply(helpText);
 });
+// Command handlers for text commands
+bot.command("add_income", async (ctx) => {
+    await ctx.conversation.enter(flows_1.addIncomeConversation.name);
+});
+bot.command("add_expense", async (ctx) => {
+    await ctx.conversation.enter(flows_1.addExpenseConversation.name);
+});
+bot.command("report_today", async (ctx) => {
+    const { start, end } = getDayRange(new Date());
+    const income = await db_1.default.transaction.aggregate({
+        _sum: { amount: true },
+        where: {
+            type: "INCOME",
+            date: { gte: start, lte: end },
+            userId: ctx.from?.id ? { equals: (await getUser(ctx.from.id)).id } : undefined
+        },
+    });
+    const expense = await db_1.default.transaction.aggregate({
+        _sum: { amount: true },
+        where: {
+            type: "EXPENSE",
+            date: { gte: start, lte: end },
+            userId: ctx.from?.id ? { equals: (await getUser(ctx.from.id)).id } : undefined
+        },
+    });
+    const tz = process.env.TZ || "Asia/Tashkent";
+    await ctx.reply(`📊 Bugungi hisobot (${(0, date_fns_tz_1.formatInTimeZone)(new Date(), tz, "yyyy-MM-dd")}):\n\n` +
+        `Kirim: ${income._sum.amount ?? 0}\n` +
+        `Chiqim: ${expense._sum.amount ?? 0}`);
+});
+bot.command("report_month", async (ctx) => {
+    const { start, end } = getMonthRange(new Date());
+    const income = await db_1.default.transaction.aggregate({
+        _sum: { amount: true },
+        where: {
+            type: "INCOME",
+            date: { gte: start, lte: end },
+            userId: ctx.from?.id ? { equals: (await getUser(ctx.from.id)).id } : undefined
+        },
+    });
+    const expense = await db_1.default.transaction.aggregate({
+        _sum: { amount: true },
+        where: {
+            type: "EXPENSE",
+            date: { gte: start, lte: end },
+            userId: ctx.from?.id ? { equals: (await getUser(ctx.from.id)).id } : undefined
+        },
+    });
+    const tz = process.env.TZ || "Asia/Tashkent";
+    await ctx.reply(`📅 Oylik hisobot (${(0, date_fns_tz_1.formatInTimeZone)(new Date(), tz, "yyyy-MM")}):\n\n` +
+        `Kirim: ${income._sum.amount ?? 0}\n` +
+        `Chiqim: ${expense._sum.amount ?? 0}`);
+});
+bot.command("balance", async (ctx) => {
+    const user = await getUser(ctx.from.id);
+    const income = await db_1.default.transaction.aggregate({
+        _sum: { amount: true },
+        where: {
+            type: "INCOME",
+            userId: user.id
+        },
+    });
+    const expense = await db_1.default.transaction.aggregate({
+        _sum: { amount: true },
+        where: {
+            type: "EXPENSE",
+            userId: user.id
+        },
+    });
+    const totalIncome = income._sum.amount ?? 0;
+    const totalExpense = expense._sum.amount ?? 0;
+    const balance = totalIncome - totalExpense;
+    await ctx.reply(`💰 Sizning balansingiz:\n\n` +
+        `Jami kirim: ${(0, utils_1.fmtAmount)(totalIncome)}\n` +
+        `Jami chiqim: ${(0, utils_1.fmtAmount)(totalExpense)}\n` +
+        `Balans: ${(0, utils_1.fmtAmount)(balance)}`);
+});
+// Helper function to get or create user
+async function getUser(telegramId) {
+    let user = await db_1.default.user.findUnique({
+        where: { telegramId },
+    });
+    if (!user) {
+        user = await db_1.default.user.create({
+            data: {
+                telegramId,
+                firstName: "User", // This will be updated when they use conversations
+                userName: null,
+            },
+        });
+    }
+    return user;
+}
+// Import fmtAmount at the top of the file
+const utils_1 = require("./utils");
 // Button Logics
 bot.callbackQuery("add_income", async (ctx) => {
     await ctx.answerCallbackQuery();
@@ -93,13 +193,22 @@ function getMonthRange(date) {
 bot.callbackQuery("report_today", async (ctx) => {
     await ctx.answerCallbackQuery();
     const { start, end } = getDayRange(new Date());
+    const user = await getUser(ctx.from.id);
     const income = await db_1.default.transaction.aggregate({
         _sum: { amount: true },
-        where: { type: "INCOME", date: { gte: start, lte: end } },
+        where: {
+            type: "INCOME",
+            date: { gte: start, lte: end },
+            userId: user.id
+        },
     });
     const expense = await db_1.default.transaction.aggregate({
         _sum: { amount: true },
-        where: { type: "EXPENSE", date: { gte: start, lte: end } },
+        where: {
+            type: "EXPENSE",
+            date: { gte: start, lte: end },
+            userId: user.id
+        },
     });
     const tz = process.env.TZ || "Asia/Tashkent";
     await ctx.reply(`📊 Bugungi hisobot (${(0, date_fns_tz_1.formatInTimeZone)(new Date(), tz, "yyyy-MM-dd")}):\n\n` +
@@ -109,13 +218,22 @@ bot.callbackQuery("report_today", async (ctx) => {
 bot.callbackQuery("report_month", async (ctx) => {
     await ctx.answerCallbackQuery();
     const { start, end } = getMonthRange(new Date());
+    const user = await getUser(ctx.from.id);
     const income = await db_1.default.transaction.aggregate({
         _sum: { amount: true },
-        where: { type: "INCOME", date: { gte: start, lte: end } },
+        where: {
+            type: "INCOME",
+            date: { gte: start, lte: end },
+            userId: user.id
+        },
     });
     const expense = await db_1.default.transaction.aggregate({
         _sum: { amount: true },
-        where: { type: "EXPENSE", date: { gte: start, lte: end } },
+        where: {
+            type: "EXPENSE",
+            date: { gte: start, lte: end },
+            userId: user.id
+        },
     });
     const tz = process.env.TZ || "Asia/Tashkent";
     await ctx.reply(`📅 Oylik hisobot (${(0, date_fns_tz_1.formatInTimeZone)(new Date(), tz, "yyyy-MM")}):\n\n` +
