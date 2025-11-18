@@ -1,6 +1,8 @@
 import prisma from "../db";
 import { MyContext } from "../types";
 import { fmtAmount } from "../utils";
+import { Conversation } from "@grammyjs/conversations";
+import { getMonthRangeForDate } from "../utils";
 
 export async function addIncomeConversation(
   conversation: Conversation<MyContext>,
@@ -10,18 +12,13 @@ export async function addIncomeConversation(
   const sourceMsg = await conversation.wait(); // pause until next message from user
   console.log(
     "addIncomeConversation: got sourceMsg",
-    sourceMsg.updateType,
+    Object.keys(sourceMsg),
     sourceMsg.message?.text,
   );
   const source = sourceMsg.message?.text?.trim() ?? "Daromad";
 
   await ctx.reply("Summasini kiriting (raqam, masalan, 500000)");
   const amountMsg = await conversation.wait();
-  console.log(
-    "addIncomeConversation: got amountMsg",
-    amountMsg.updateType,
-    amountMsg.message?.text,
-  );
   const amountText = (amountMsg.message?.text ?? "").replace(",", ".").trim();
   const amount = parseFloat(amountText);
   if (Number.isNaN(amount) || amount <= 0) {
@@ -38,7 +35,7 @@ export async function addIncomeConversation(
       data: {
         telegramId: ctx.from!.id,
         firstName: ctx.from!.first_name,
-        userName: ctx.from!.username,
+        userName: ctx.from!.username ?? null,
       },
     });
   }
@@ -71,7 +68,7 @@ export async function addExpenseConversation(
   ctx: MyContext,
 ) {
   // Title
-  await ctx.reply("Xarajat nomini kiriting (masalan: non, transport):");
+  await ctx.reply("Xarajat nomini kiriting (masalan: go'sht, transport):");
   const titleMsg = await conversation.wait();
   const title = titleMsg.message?.text?.trim() ?? "xarajat";
 
@@ -99,7 +96,7 @@ export async function addExpenseConversation(
       data: {
         telegramId: ctx.from!.id,
         firstName: ctx.from!.first_name,
-        username: ctx.from!.username ?? undefined,
+        userName: ctx.from!.username ?? null,
       },
     });
   }

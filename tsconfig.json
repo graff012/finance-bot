@@ -1,0 +1,28 @@
+{
+  // Visit https://aka.ms/tsconfig to read more about this file
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+
+    "module": "nodenext",
+    "target": "esnext",
+    "types": [],
+    "lib": ["esnext"],
+    "types": ["node"],
+
+    "sourceMap": true,
+    "declaration": false,
+    "declarationMap": false,
+
+    "noUncheckedIndexedAccess": true,
+    // "exactOptionalPropertyTypes": true,
+
+    "strict": false,
+    "isolatedModules": true,
+    "moduleResolution": "nodenext",
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": false,
+  },
+ "include": ["src/**/*"],
+ "exclude": ["node_modules", "dist"]
+}

@@ -1,7 +1,7 @@
 // src/bot.ts
 import "dotenv/config";
 import { Bot, InlineKeyboard, session } from "grammy"; // <- session imported synchronously
-import { conversations, createConversation } from "@grammyjs/conversations";
+import { Conversation, conversations, createConversation } from "@grammyjs/conversations";
 import { formatInTimeZone, toZonedTime } from "date-fns-tz";
 import prisma from "./db";
 import { MyContext, MySession } from "./types";
@@ -19,28 +19,29 @@ const bot = new Bot<MyContext>(token);
 bot.use(session({ initial: (): MySession => ({}) } as any)); // no top-level await needed
 
 // register conversations plugin
-bot.use(conversations());
+bot.use(conversations() as any);
 
 // register conversation functions
 bot.use(createConversation(addIncomeConversation) as any);
 bot.use(createConversation(addExpenseConversation) as any);
 
+
 // debugging middleware — prints every incoming update (safe to remove later)
-bot.use(async (ctx, next) => {
-  try {
-    console.log("--- incoming update ---");
-    console.log("updateType:", ctx.updateType);
-    // Print a compact message text if present, else the whole update (small)
-    if (ctx.message?.text) {
-      console.log("message.text:", ctx.message.text);
-    } else {
-      console.log(JSON.stringify(ctx.update, null, 2));
-    }
-  } catch (e) {
-    console.warn("debug log failed", e);
-  }
-  await next();
-});
+// bot.use(async (ctx, next) => {
+//   try {
+//     console.log("--- incoming update ---");
+//     console.log("updateType:", ctx.updateType);
+//     // Print a compact message text if present, else the whole update (small)
+//     if (ctx.message?.text) {
+//       console.log("message.text:", ctx.message.text);
+//     } else {
+//       console.log(JSON.stringify(ctx.update, null, 2));
+//     }
+//   } catch (e) {
+//     console.warn("debug log failed", e);
+//   }
+//   await next();
+// });
 
 // Main menu keyboard
 const mainMenu = new InlineKeyboard()
@@ -60,7 +61,6 @@ bot.command("start", async (ctx) => {
   );
 });
 
-// src/bot.ts — add this near your other command handlers (before bot.start())
 bot.command("help", async (ctx) => {
   const helpText = `📚 *Yordam — Finance Bot* 
 
@@ -82,12 +82,12 @@ Agar sizga yordam kerak bo'lsa yoki xatolik ko'rsangiz, menga xabar yuboring.`;
 // Button Logics
 bot.callbackQuery("add_income", async (ctx) => {
   await ctx.answerCallbackQuery();
-  await ctx.conversation.enter(addIncomeConversation.name);
+  await (ctx as any).conversation.enter(addIncomeConversation.name);
 });
 
 bot.callbackQuery("add_expense", async (ctx) => {
   await ctx.answerCallbackQuery();
-  await ctx.conversation.enter(addExpenseConversation.name);
+  await (ctx as any).conversation.enter(addExpenseConversation.name);
 });
 
 // Better: use date ranges for day/month queries (rather than comparing strings)
