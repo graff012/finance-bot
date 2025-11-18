@@ -65,10 +65,7 @@ Asosiy buyruqlar:
 /balance — Balansni ko'rish
 
 🔔 Eslatma:
-• Bot yangi xarajat qo'shilganda avtomatik tekshiradi — agar shu oy xarajatlaringiz daromaddan oshsa, ogohlantiradi.
-
-Agar sizga yordam kerak bo'lsa yoki xatolik ko'rsangiz, menga xabar yuboring.`;
-    // send as Markdown to get bold/italics (avoid user-supplied content here)
+• Bot yangi xarajat qo'shilganda avtomatik tekshiradi — agar shu oy xarajatlaringiz daromaddan oshsa, ogohlantiradi.`;
     await ctx.reply(helpText);
 });
 // Command handlers for text commands
@@ -85,7 +82,9 @@ bot.command("report_today", async (ctx) => {
         where: {
             type: "INCOME",
             date: { gte: start, lte: end },
-            userId: ctx.from?.id ? { equals: (await getUser(ctx.from.id)).id } : undefined
+            userId: ctx.from?.id
+                ? { equals: (await getUser(ctx.from.id)).id }
+                : undefined,
         },
     });
     const expense = await db_1.default.transaction.aggregate({
@@ -93,7 +92,9 @@ bot.command("report_today", async (ctx) => {
         where: {
             type: "EXPENSE",
             date: { gte: start, lte: end },
-            userId: ctx.from?.id ? { equals: (await getUser(ctx.from.id)).id } : undefined
+            userId: ctx.from?.id
+                ? { equals: (await getUser(ctx.from.id)).id }
+                : undefined,
         },
     });
     const tz = process.env.TZ || "Asia/Tashkent";
@@ -108,7 +109,9 @@ bot.command("report_month", async (ctx) => {
         where: {
             type: "INCOME",
             date: { gte: start, lte: end },
-            userId: ctx.from?.id ? { equals: (await getUser(ctx.from.id)).id } : undefined
+            userId: ctx.from?.id
+                ? { equals: (await getUser(ctx.from.id)).id }
+                : undefined,
         },
     });
     const expense = await db_1.default.transaction.aggregate({
@@ -116,7 +119,9 @@ bot.command("report_month", async (ctx) => {
         where: {
             type: "EXPENSE",
             date: { gte: start, lte: end },
-            userId: ctx.from?.id ? { equals: (await getUser(ctx.from.id)).id } : undefined
+            userId: ctx.from?.id
+                ? { equals: (await getUser(ctx.from.id)).id }
+                : undefined,
         },
     });
     const tz = process.env.TZ || "Asia/Tashkent";
@@ -130,14 +135,14 @@ bot.command("balance", async (ctx) => {
         _sum: { amount: true },
         where: {
             type: "INCOME",
-            userId: user.id
+            userId: user.id,
         },
     });
     const expense = await db_1.default.transaction.aggregate({
         _sum: { amount: true },
         where: {
             type: "EXPENSE",
-            userId: user.id
+            userId: user.id,
         },
     });
     const totalIncome = income._sum.amount ?? 0;
@@ -199,7 +204,7 @@ bot.callbackQuery("report_today", async (ctx) => {
         where: {
             type: "INCOME",
             date: { gte: start, lte: end },
-            userId: user.id
+            userId: user.id,
         },
     });
     const expense = await db_1.default.transaction.aggregate({
@@ -207,7 +212,7 @@ bot.callbackQuery("report_today", async (ctx) => {
         where: {
             type: "EXPENSE",
             date: { gte: start, lte: end },
-            userId: user.id
+            userId: user.id,
         },
     });
     const tz = process.env.TZ || "Asia/Tashkent";
@@ -224,7 +229,7 @@ bot.callbackQuery("report_month", async (ctx) => {
         where: {
             type: "INCOME",
             date: { gte: start, lte: end },
-            userId: user.id
+            userId: user.id,
         },
     });
     const expense = await db_1.default.transaction.aggregate({
@@ -232,7 +237,7 @@ bot.callbackQuery("report_month", async (ctx) => {
         where: {
             type: "EXPENSE",
             date: { gte: start, lte: end },
-            userId: user.id
+            userId: user.id,
         },
     });
     const tz = process.env.TZ || "Asia/Tashkent";
@@ -242,6 +247,17 @@ bot.callbackQuery("report_month", async (ctx) => {
 });
 bot.catch((err) => {
     console.error("Bot Error:", err);
+});
+// Graceful shutdown
+process.once('SIGINT', () => {
+    console.log('Shutting down gracefully...');
+    bot.stop();
+    process.exit(0);
+});
+process.once('SIGTERM', () => {
+    console.log('Shutting down gracefully...');
+    bot.stop();
+    process.exit(0);
 });
 bot.start();
 console.log("Bot is running");
