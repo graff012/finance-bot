@@ -332,5 +332,18 @@ bot.catch((err) => {
   console.error("Bot Error:", err);
 });
 
+// Graceful shutdown
+process.once('SIGINT', () => {
+  console.log('Shutting down gracefully...');
+  bot.stop();
+  process.exit(0);
+});
+
+process.once('SIGTERM', () => {
+  console.log('Shutting down gracefully...');
+  bot.stop();
+  process.exit(0);
+});
+
 bot.start();
 console.log("Bot is running");
