@@ -345,5 +345,15 @@ process.once('SIGTERM', () => {
   process.exit(0);
 });
 
-bot.start();
-console.log("Bot is running");
+(async () => {
+  try {
+    await bot.api.deleteWebhook();
+    console.log('Webhook cleared (if existed).');
+  } catch (e) {
+    console.warn('deleteWebhook failed (non-fatal):', e?.message ?? e);
+  }
+
+  // Now safe to start long-polling
+  await bot.start();
+  console.log('Bot is running');
+})();
