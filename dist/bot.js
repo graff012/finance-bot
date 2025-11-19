@@ -10,6 +10,7 @@ const conversations_1 = require("@grammyjs/conversations");
 const date_fns_tz_1 = require("date-fns-tz");
 const db_1 = __importDefault(require("./db"));
 const flows_1 = require("./handlers/flows");
+const express_1 = __importDefault(require("express"));
 const token = process.env.BOT_TOKEN;
 if (!token)
     throw new Error("BOT_TOKEN is missing");
@@ -248,17 +249,51 @@ bot.callbackQuery("report_month", async (ctx) => {
 bot.catch((err) => {
     console.error("Bot Error:", err);
 });
-// Graceful shutdown
-process.once('SIGINT', () => {
-    console.log('Shutting down gracefully...');
-    bot.stop();
-    process.exit(0);
+const WEBHOOK_URL = process.env.WEBHOOK_URL;
+const PORT = Number(process.env.PORT || 3000);
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || "finance-bot-secret";
+// validate
+if (!WEBHOOK_URL) {
+    throw new Error("WEBHOOK_URL is missing in env (e.g. https://your-app.onrender.com)");
+}
+// choose a secret path — avoids accidental duplicate webhooks
+const webhookPath = `/webhook/${WEBHOOK_SECRET}`;
+// Express app
+const app = (0, express_1.default)();
+app.use(express_1.default.json());
+// Telegram will POST updates here
+app.post(webhookPath, (0, grammy_1.webhookCallback)(bot, "express"));
+// a simple healthcheck
+app.get("/", (_req, res) => res.send("OK"));
+// start express server and set webhook on Telegram
+const server = app.listen(PORT, async () => {
+    const fullWebhookUrl = `${WEBHOOK_URL}${webhookPath}`;
+    console.log(`Server listening on port ${PORT}, setting webhook to ${fullWebhookUrl}`);
+    try {
+        // Set webhook to Telegram (overwrite any previous webhook)
+        await bot.api.setWebhook(fullWebhookUrl);
+        console.log("Webhook set successfully.");
+    }
+    catch (err) {
+        console.error("Failed to set webhook:", err);
+        // don't exit — sometimes Telegram transiently fails. You may want to crash or keep trying.
+    }
 });
-process.once('SIGTERM', () => {
-    console.log('Shutting down gracefully...');
-    bot.stop();
-    process.exit(0);
-});
-bot.start();
-console.log("Bot is running");
+// graceful shutdown
+async function gracefulShutdown() {
+    console.log("Shutting down gracefully...");
+    try {
+        // remove webhook so Telegram stops sending to this instance
+        await bot.api.deleteWebhook();
+    }
+    catch (e) {
+        console.warn("deleteWebhook failed:", e?.message ?? e);
+    }
+    server.close(() => {
+        console.log("HTTP server closed.");
+        process.exit(0);
+    });
+}
+process.once("SIGINT", gracefulShutdown);
+process.once("SIGTERM", gracefulShutdown);
 //# sourceMappingURL=bot.js.map

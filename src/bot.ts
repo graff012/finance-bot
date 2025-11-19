@@ -1,4 +1,3 @@
-// src/bot.ts
 import "dotenv/config";
 import { Bot, InlineKeyboard, session, webhookCallback } from "grammy"; // <- session imported synchronously
 import {
@@ -348,6 +347,11 @@ const webhookPath = `/webhook/${WEBHOOK_SECRET}`;
 // Express app
 const app = express();
 app.use(express.json());
+
+app.post("/webhook-debug", async (req, res) => {
+  console.log('webhook-debug body:', JSON.stringify(req.body).slice(0, 1000));
+  res.sendStatus(200);
+});
 
 // Telegram will POST updates here
 app.post(webhookPath, webhookCallback(bot, "express"));
