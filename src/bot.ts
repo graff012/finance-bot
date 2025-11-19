@@ -354,7 +354,29 @@ app.post("/webhook-debug", async (req, res) => {
 });
 
 // Telegram will POST updates here
-app.post(webhookPath, webhookCallback(bot, "express"));
+
+// With this robust wrapper:
+app.post(webhookPath, async (req, res) => {
+  try {
+    // Very small debug log for incoming update (optional)
+    // console.log('Incoming update type:', req.body?.update_id ? 'update' : typeof req.body);
+    // Let grammY process the update safely
+    await bot.handleUpdate(req.body);
+    res.sendStatus(200);
+  } catch (err) {
+    // Log everything we can for debugging
+    console.error("Webhook handler error:", err && err.stack ? err.stack : err);
+    // Also log small context of incoming update to spot bad payloads (trim large bodies)
+    try {
+      const payloadPreview = JSON.stringify(req.body).slice(0, 2000);
+      console.error("Webhook payload (preview):", payloadPreview);
+    } catch (e) {
+      console.error("Failed to stringify payload preview:", e);
+    }
+    // Return 200 so Telegram doesn't retry aggressively; we'll fix root cause next
+    res.sendStatus(200);
+  }
+});
 
 // a simple healthcheck
 app.get("/", (_req, res) => res.send("OK"));
