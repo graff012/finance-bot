@@ -360,17 +360,57 @@ app.post(webhookPath, webhookCallback(bot, "express"));
 app.get("/", (_req, res) => res.send("OK"));
 
 // start express server and set webhook on Telegram
-const server = app.listen(PORT, async () => {
-  const fullWebhookUrl = `${WEBHOOK_URL}${webhookPath}`;
-  console.log(`Server listening on port ${PORT}, setting webhook to ${fullWebhookUrl}`);
-
+// safe webhook setter: check current webhook first and respect retry-after
+async function ensureWebhookSet(bot: Bot, baseUrl: string, webhookPath: string) {
+  const fullUrl = `${baseUrl.replace(/\/$/, "")}${webhookPath}`;
   try {
-    // Set webhook to Telegram (overwrite any previous webhook)
-    await bot.api.setWebhook(fullWebhookUrl);
+    const info = await bot.api.getWebhookInfo();
+    const current = info.url || "";
+
+    if (current === fullUrl) {
+      console.log("Webhook already set and matches:", fullUrl);
+      return;
+    }
+
+    console.log("Current webhook differs. Setting webhook to:", fullUrl);
+    await bot.api.setWebhook(fullUrl);
     console.log("Webhook set successfully.");
-  } catch (err) {
-    console.error("Failed to set webhook:", err);
-    // don't exit — sometimes Telegram transiently fails. You may want to crash or keep trying.
+    return;
+  } catch (err: any) {
+    // If Telegram tells us to wait, respect it
+    const params = err?.parameters;
+    const retryAfter = params?.retry_after;
+    if (retryAfter) {
+      const waitMs = Number(retryAfter) * 1000;
+      console.warn(`setWebhook rate-limited. retry_after=${retryAfter}s — waiting ${waitMs}ms and retrying once.`);
+      await new Promise((res) => setTimeout(res, waitMs));
+      // try one more time
+      try {
+        await bot.api.setWebhook(fullUrl);
+        console.log("Webhook set successfully after waiting.");
+        return;
+      } catch (err2) {
+        console.error("Failed to set webhook after waiting:", err2);
+        return;
+      }
+    }
+
+    // Other errors
+    console.error("Failed to check/set webhook:", err);
+    return;
+  }
+}
+
+const server = app.listen(PORT, async () => {
+  const base = (WEBHOOK_URL || "").replace(/\/$/, "");
+  const fullWebhookUrl = `${base}${webhookPath}`;
+  console.log(`Server listening on port ${PORT}, will ensure webhook ${fullWebhookUrl}`);
+
+  // Ensure we don't spam setWebhook across rapid deploys
+  try {
+    await ensureWebhookSet(bot, base, webhookPath);
+  } catch (e) {
+    console.error("ensureWebhookSet error:", e);
   }
 });
   
